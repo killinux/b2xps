@@ -58,16 +58,26 @@ def export_mesh(obj, armature, bone_name_to_idx, settings):
     mesh.vertices.foreach_get("co", co_buf)
     all_co = co_buf.reshape(-1, 3)
 
-    # batch read normals
+    # batch read split normals (per-loop)
     n_loops = len(mesh.loops)
-    if hasattr(mesh, 'corner_normals') and len(mesh.corner_normals) > 0:
+    use_corner_normals = hasattr(mesh, 'corner_normals') and len(mesh.corner_normals) > 0
+    if use_corner_normals:
+        # Blender 4.1+
         nor_buf = np.empty(n_loops * 3, dtype=np.float32)
         mesh.corner_normals.foreach_get("vector", nor_buf)
         all_normals = nor_buf.reshape(-1, 3)
+    elif hasattr(mesh, 'calc_normals_split'):
+        # Blender 3.x
+        mesh.calc_normals_split()
+        nor_buf = np.empty(n_loops * 3, dtype=np.float32)
+        mesh.loops.foreach_get("normal", nor_buf)
+        all_normals = nor_buf.reshape(-1, 3)
     else:
+        # fallback: vertex normals
         nor_buf = np.empty(n_verts * 3, dtype=np.float32)
         mesh.vertices.foreach_get("normal", nor_buf)
         all_normals = nor_buf.reshape(-1, 3)
+        use_corner_normals = False
 
     # batch read UVs
     uv_layers = mesh.uv_layers
@@ -82,13 +92,19 @@ def export_mesh(obj, armature, bone_name_to_idx, settings):
     loop_vidx = np.empty(n_loops, dtype=np.int32)
     mesh.loops.foreach_get("vertex_index", loop_vidx)
 
-    # vertex colors
-    has_colors = bool(mesh.color_attributes)
+    # vertex colors (color_attributes in 3.2+, vertex_colors as fallback)
     color_data = None
     color_domain = None
-    if has_colors:
+    ca = None
+    if hasattr(mesh, 'color_attributes') and mesh.color_attributes:
         ca = mesh.color_attributes[0]
-        color_domain = ca.domain
+    elif hasattr(mesh, 'vertex_colors') and mesh.vertex_colors:
+        ca = mesh.vertex_colors.active
+        if ca:
+            color_domain = 'CORNER'
+    if ca and color_domain is None:
+        color_domain = getattr(ca, 'domain', 'CORNER')
+    if ca:
         n_entries = len(ca.data)
         cbuf = np.empty(n_entries * 4, dtype=np.float32)
         ca.data.foreach_get("color", cbuf)
@@ -121,7 +137,7 @@ def export_mesh(obj, armature, bone_name_to_idx, settings):
             wco = obj_mat @ mesh.vertices[vi].co
             pos = coord_transform(wco)
 
-            if hasattr(mesh, 'corner_normals') and len(mesh.corner_normals) > 0:
+            if use_corner_normals or hasattr(mesh, 'calc_normals_split'):
                 ln = Vector(all_normals[loop_idx])
             else:
                 ln = Vector(all_normals[vi])

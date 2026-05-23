@@ -277,18 +277,24 @@ def copy_textures(mesh_objects, output_dir):
     return list(copied)
 
 
+def _is_rig_shape(obj):
+    name = obj.name
+    return (name.startswith("cs_") or name.startswith("WGT-") or
+            not obj.material_slots)
+
+
 def export(filepath, settings):
     if settings.get("export_selected"):
         objects = bpy.context.selected_objects
     else:
-        objects = bpy.context.visible_objects
+        objects = list(bpy.context.scene.objects)
 
     armature = None
     mesh_objects = []
     for obj in objects:
         if obj.type == "ARMATURE":
             armature = obj
-        elif obj.type == "MESH" and obj.data.vertices:
+        elif obj.type == "MESH" and obj.data.vertices and not _is_rig_shape(obj):
             mesh_objects.append(obj)
 
     bones, bone_name_to_idx = export_bones(armature)

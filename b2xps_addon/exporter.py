@@ -209,8 +209,14 @@ def _build_submesh(obj, prep, mat_idx, mat):
 
     rg, tex_list = materials.build_texture_list(mat)
 
+    # strip existing render group prefix from object name (e.g. "5_Head" -> "Head")
+    base_name = obj.name
+    import re
+    m = re.match(r'^\d+_(.+)$', base_name)
+    if m:
+        base_name = m.group(1)
     mat_name = mat.name if mat else f"mat{mat_idx}"
-    mesh_name = f"{rg}_{obj.name}.{mat_name}"
+    mesh_name = f"{rg}_{base_name}.{mat_name}"
 
     return {
         "name": mesh_name,
@@ -232,7 +238,12 @@ def export_mesh(obj, armature, bone_name_to_idx, settings):
         mat = obj.material_slots[0].material if obj.material_slots else None
         sub = _build_submesh(obj, prep, 0, mat)
         if sub:
-            sub["name"] = f"{sub['render_group']}_{obj.name}"
+            import re
+            base = obj.name
+            m = re.match(r'^\d+_(.+)$', base)
+            if m:
+                base = m.group(1)
+            sub["name"] = f"{sub['render_group']}_{base}"
             submeshes.append(sub)
     else:
         for mat_idx, slot in enumerate(obj.material_slots):

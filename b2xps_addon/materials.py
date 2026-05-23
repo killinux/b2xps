@@ -78,17 +78,39 @@ def extract_textures_principled(material):
     return tex_dic
 
 
+def _collect_images(node_tree, images):
+    for node in node_tree.nodes:
+        if node.bl_idname == "ShaderNodeTexImage" and node.image:
+            abs_path = bpy.path.abspath(node.image.filepath)
+            basename = os.path.basename(abs_path)
+            if basename not in images:
+                images.append(basename)
+        elif node.bl_idname == "ShaderNodeGroup" and node.node_tree:
+            _collect_images(node.node_tree, images)
+
+
 def extract_textures_generic(material):
     if not material or not material.use_nodes:
         return {}
     tex_dic = {}
     images = []
-    for node in material.node_tree.nodes:
-        if node.bl_idname == "ShaderNodeTexImage" and node.image:
-            abs_path = bpy.path.abspath(node.image.filepath)
-            images.append(os.path.basename(abs_path))
-    if images:
-        tex_dic[TexType.DIFFUSE] = images[0]
+    _collect_images(material.node_tree, images)
+    # guess texture type by filename convention
+    type_order = [TexType.DIFFUSE, TexType.BUMP, TexType.SPECULAR, TexType.EMISSION]
+    for i, img in enumerate(images):
+        low = img.lower()
+        if "_n." in low or "_n_" in low or "normal" in low or "_norm" in low:
+            tex_dic[TexType.BUMP] = img
+        elif "_s." in low or "_s_" in low or "specular" in low or "spec" in low or "_orm" in low:
+            tex_dic[TexType.SPECULAR] = img
+        elif "_e." in low or "_e_" in low or "emission" in low or "emiss" in low:
+            tex_dic[TexType.EMISSION] = img
+        elif TexType.DIFFUSE not in tex_dic:
+            tex_dic[TexType.DIFFUSE] = img
+        elif i < len(type_order):
+            t = type_order[i]
+            if t not in tex_dic:
+                tex_dic[t] = img
     return tex_dic
 
 

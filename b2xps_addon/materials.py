@@ -25,27 +25,20 @@ PRINCIPLED_INPUT_MAP = {
 }
 
 # render group number -> (alpha, [texture slot types])
+# Must match XNALaraMesh xps_material.py definitions exactly
 RENDER_GROUPS = {
-    1:  (False, [TexType.DIFFUSE, TexType.LIGHTMAP, TexType.BUMP,
-                 TexType.MASK, TexType.BUMP1, TexType.BUMP2]),
-    2:  (False, [TexType.DIFFUSE, TexType.LIGHTMAP, TexType.BUMP]),
-    3:  (False, [TexType.DIFFUSE, TexType.LIGHTMAP]),
     4:  (False, [TexType.DIFFUSE, TexType.BUMP]),
     5:  (False, [TexType.DIFFUSE]),
     6:  (True,  [TexType.DIFFUSE, TexType.BUMP]),
     7:  (True,  [TexType.DIFFUSE]),
-    8:  (True,  [TexType.DIFFUSE, TexType.LIGHTMAP, TexType.BUMP]),
-    9:  (True,  [TexType.DIFFUSE, TexType.LIGHTMAP]),
-    10: (False, [TexType.DIFFUSE]),
-    21: (False, [TexType.DIFFUSE, TexType.BUMP, TexType.SPECULAR,
-                 TexType.ENVIRONMENT]),
-    22: (True,  [TexType.DIFFUSE, TexType.BUMP, TexType.SPECULAR,
-                 TexType.ENVIRONMENT]),
-    23: (False, [TexType.DIFFUSE, TexType.BUMP, TexType.SPECULAR]),
-    24: (True,  [TexType.DIFFUSE, TexType.BUMP, TexType.SPECULAR]),
-    25: (False, [TexType.DIFFUSE, TexType.BUMP, TexType.SPECULAR,
+    36: (False, [TexType.DIFFUSE, TexType.BUMP, TexType.EMISSION]),
+    37: (True,  [TexType.DIFFUSE, TexType.BUMP, TexType.EMISSION]),
+    38: (False, [TexType.DIFFUSE, TexType.BUMP, TexType.SPECULAR,
                  TexType.EMISSION]),
-    26: (False, [TexType.DIFFUSE]),
+    39: (True,  [TexType.DIFFUSE, TexType.BUMP, TexType.SPECULAR,
+                 TexType.EMISSION]),
+    40: (False, [TexType.DIFFUSE, TexType.BUMP, TexType.SPECULAR]),
+    41: (True,  [TexType.DIFFUSE, TexType.BUMP, TexType.SPECULAR]),
 }
 
 
@@ -123,34 +116,30 @@ def has_alpha_material(material):
 
 
 def choose_render_group(tex_types, alpha=False):
-    has_diff = TexType.DIFFUSE in tex_types
     has_bump = TexType.BUMP in tex_types
     has_spec = TexType.SPECULAR in tex_types
     has_emit = TexType.EMISSION in tex_types
-    has_light = TexType.LIGHTMAP in tex_types
-    has_env = TexType.ENVIRONMENT in tex_types
 
-    if has_emit and has_bump and has_spec:
-        return 25
     if alpha:
-        if has_spec and has_env:
-            return 22
+        if has_spec and has_emit:
+            return 39   # alpha + diff + bump + spec + emission
         if has_spec:
-            return 24
+            return 41   # alpha + diff + bump + specular
+        if has_emit:
+            return 37   # alpha + diff + bump + emission
         if has_bump:
-            return 6
-        return 7
-    if has_spec and has_env:
-        return 21
-    if has_spec:
-        return 23
-    if has_light and has_bump:
-        return 2
-    if has_bump:
-        return 4
-    if has_light:
-        return 3
-    return 5
+            return 6    # alpha + diff + bump
+        return 7        # alpha + diff only
+    else:
+        if has_spec and has_emit:
+            return 38   # diff + bump + spec + emission
+        if has_spec:
+            return 40   # diff + bump + specular
+        if has_emit:
+            return 36   # diff + bump + emission
+        if has_bump:
+            return 4    # diff + bump
+        return 5        # diff only
 
 
 def build_texture_list(material):

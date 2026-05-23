@@ -1,0 +1,100 @@
+import struct
+
+
+def _write_string(f, s):
+    encoded = s.encode("utf-8")
+    f.write(struct.pack("<I", len(encoded)))
+    f.write(encoded)
+
+
+def write_binary(filepath, bones, meshes):
+    with open(filepath, "wb") as f:
+        # .mesh format: no header, starts directly with bones
+        f.write(struct.pack("<I", len(bones)))
+        for bone in bones:
+            _write_string(f, bone["name"])
+            f.write(struct.pack("<h", bone["parent"]))
+            f.write(struct.pack("<3f", *bone["position"]))
+        # Meshes
+        f.write(struct.pack("<I", len(meshes)))
+        for mesh in meshes:
+            _write_string(f, mesh["name"])
+            uv_count = mesh["uv_count"]
+            f.write(struct.pack("<I", uv_count))
+            textures = mesh["textures"]
+            f.write(struct.pack("<I", len(textures)))
+            for tex_name in textures:
+                _write_string(f, tex_name)
+                f.write(struct.pack("<I", 0))
+            # Vertices
+            verts = mesh["vertices"]
+            f.write(struct.pack("<I", len(verts)))
+            for v in verts:
+                f.write(struct.pack("<3f", *v["position"]))
+                f.write(struct.pack("<3f", *v["normal"]))
+                f.write(struct.pack("<4B", *v["color"]))
+                for uv in v["uvs"]:
+                    f.write(struct.pack("<2f", *uv))
+                # 1 tangent per vertex (not per UV layer)
+                f.write(struct.pack("<4f", 1, 0, 0, 0))
+                # fixed 4 bone weights, sorted by weight descending
+                bw = sorted(v["bone_weights"], key=lambda x: x[1], reverse=True)[:4]
+                indices = [w[0] for w in bw]
+                weights = [w[1] for w in bw]
+                while len(indices) < 4:
+                    indices.append(0)
+                    weights.append(0.0)
+                total = sum(weights)
+                if total > 0:
+                    weights = [w / total for w in weights]
+                f.write(struct.pack("<4H", *indices))
+                f.write(struct.pack("<4f", *weights))
+            # Faces: count = number of triangles
+            faces = mesh["faces"]
+            f.write(struct.pack("<I", len(faces)))
+            for face in faces:
+                f.write(struct.pack("<3I", *face))
+
+
+def write_ascii(filepath, bones, meshes):
+    lines = []
+    lines.append(str(len(bones)))
+    for bone in bones:
+        lines.append(bone["name"])
+        lines.append(str(bone["parent"]))
+        p = bone["position"]
+        lines.append(f"{p[0]:.6f} {p[1]:.6f} {p[2]:.6f}")
+
+    lines.append(str(len(meshes)))
+    for mesh in meshes:
+        lines.append(mesh["name"])
+        lines.append(str(mesh["uv_count"]))
+        textures = mesh["textures"]
+        lines.append(str(len(textures)))
+        for tex_name in textures:
+            lines.append(tex_name)
+            lines.append("0")
+
+        verts = mesh["vertices"]
+        lines.append(str(len(verts)))
+        for v in verts:
+            p = v["position"]
+            lines.append(f"{p[0]:.6f} {p[1]:.6f} {p[2]:.6f}")
+            n = v["normal"]
+            lines.append(f"{n[0]:.6f} {n[1]:.6f} {n[2]:.6f}")
+            c = v["color"]
+            lines.append(f"{c[0]} {c[1]} {c[2]} {c[3]}")
+            for uv in v["uvs"]:
+                lines.append(f"{uv[0]:.6f} {uv[1]:.6f}")
+            bw = v["bone_weights"]
+            lines.append(str(len(bw)))
+            for idx, weight in bw:
+                lines.append(f"{idx} {weight:.6f}")
+
+        faces = mesh["faces"]
+        lines.append(str(len(faces)))
+        for face in faces:
+            lines.append(f"{face[0]} {face[1]} {face[2]}")
+
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")

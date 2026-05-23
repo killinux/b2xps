@@ -1,15 +1,16 @@
 bl_info = {
     "name": "B2XPS - Universal Blender to XPS Exporter",
     "author": "b2xps",
-    "version": (1, 0, 0),
+    "version": (1, 1, 0),
     "blender": (4, 0, 0),
-    "location": "File > Export > XPS Model (.mesh/.xps/.mesh.ascii)",
+    "location": "File > Export, 3D Viewport > Sidebar > B2XPS",
     "description": "Export Blender models to XPS/XNALara format with "
                    "automatic Principled BSDF material mapping",
     "category": "Import-Export",
 }
 
 import bpy
+import os
 from bpy.props import StringProperty, BoolProperty, EnumProperty
 from bpy_extras.io_utils import ExportHelper
 
@@ -80,19 +81,137 @@ class B2XPS_OT_export(bpy.types.Operator, ExportHelper):
         layout.prop(self, "copy_textures")
 
 
+class B2XPS_OT_export_selected(bpy.types.Operator):
+    bl_idname = "b2xps.export_selected"
+    bl_label = "Export Selected"
+    bl_description = "Export selected objects to XPS format"
+    bl_options = {'REGISTER', 'UNDO'}
+
+    @classmethod
+    def poll(cls, context):
+        return any(obj.type == 'MESH' for obj in context.selected_objects)
+
+    def execute(self, context):
+        scene = context.scene
+        fmt = scene.b2xps_format
+        filepath = bpy.path.abspath(scene.b2xps_export_path)
+
+        if not filepath:
+            self.report({'ERROR'}, "Export path is empty")
+            return {'CANCELLED'}
+
+        ext_map = {'MESH': '.mesh', 'XPS': '.xps', 'ASCII': '.mesh.ascii'}
+        expected_ext = ext_map[fmt]
+        base = filepath
+        for ext in ('.mesh.ascii', '.mesh', '.xps'):
+            if filepath.endswith(ext):
+                base = filepath[:-len(ext)]
+                break
+        filepath = base + expected_ext
+
+        dirpath = os.path.dirname(filepath)
+        if dirpath:
+            os.makedirs(dirpath, exist_ok=True)
+
+        from . import exporter
+        settings = {
+            "export_selected": True,
+            "copy_textures": scene.b2xps_copy_textures,
+            "format": fmt,
+        }
+        result = exporter.export(filepath, settings)
+        self.report({'INFO'},
+                    f"Exported {result['meshes']} meshes, "
+                    f"{result['bones']} bones")
+        return {'FINISHED'}
+
+
+class B2XPS_PT_panel(bpy.types.Panel):
+    bl_label = "B2XPS Export"
+    bl_idname = "B2XPS_PT_panel"
+    bl_space_type = 'VIEW_3D'
+    bl_region_type = 'UI'
+    bl_category = "B2XPS"
+
+    def draw(self, context):
+        layout = self.layout
+        scene = context.scene
+
+        # Selection info
+        mesh_objs = [o for o in context.selected_objects if o.type == 'MESH']
+        arm_objs = [o for o in context.selected_objects if o.type == 'ARMATURE']
+
+        box = layout.box()
+        box.label(text="Selection", icon='RESTRICT_SELECT_OFF')
+        box.label(text=f"Meshes: {len(mesh_objs)}")
+        box.label(text=f"Armature: {arm_objs[0].name if arm_objs else 'None'}")
+        if mesh_objs:
+            col = box.column(align=True)
+            for obj in mesh_objs[:10]:
+                col.label(text=f"  {obj.name}", icon='MESH_DATA')
+            if len(mesh_objs) > 10:
+                col.label(text=f"  ... +{len(mesh_objs) - 10} more")
+
+        # Export settings
+        layout.separator()
+        layout.label(text="Settings", icon='EXPORT')
+        layout.prop(scene, "b2xps_format")
+        layout.prop(scene, "b2xps_export_path")
+        layout.prop(scene, "b2xps_copy_textures")
+
+        # Export button
+        layout.separator()
+        row = layout.row(align=True)
+        row.scale_y = 1.5
+        row.operator("b2xps.export_selected", icon='EXPORT')
+
+
 def menu_func_export(self, context):
     self.layout.operator(B2XPS_OT_export.bl_idname,
-                         text="XPS Model (.mesh/.mesh.ascii)")
+                         text="XPS Model (.mesh/.xps/.mesh.ascii)")
+
+
+classes = (
+    B2XPS_OT_export,
+    B2XPS_OT_export_selected,
+    B2XPS_PT_panel,
+)
 
 
 def register():
-    bpy.utils.register_class(B2XPS_OT_export)
+    for cls in classes:
+        bpy.utils.register_class(cls)
     bpy.types.TOPBAR_MT_file_export.append(menu_func_export)
+
+    bpy.types.Scene.b2xps_format = EnumProperty(
+        name="Format",
+        items=[
+            ('MESH', ".mesh", "Binary, no header, with tangent"),
+            ('XPS', ".xps", "Binary, with header, no tangent"),
+            ('ASCII', ".mesh.ascii", "Text format"),
+        ],
+        default='MESH',
+    )
+    bpy.types.Scene.b2xps_export_path = StringProperty(
+        name="Path",
+        description="Export file path",
+        default="//export/model",
+        subtype='FILE_PATH',
+    )
+    bpy.types.Scene.b2xps_copy_textures = BoolProperty(
+        name="Copy Textures",
+        description="Copy texture files to export directory",
+        default=True,
+    )
 
 
 def unregister():
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
-    bpy.utils.unregister_class(B2XPS_OT_export)
+    for cls in reversed(classes):
+        bpy.utils.unregister_class(cls)
+    del bpy.types.Scene.b2xps_format
+    del bpy.types.Scene.b2xps_export_path
+    del bpy.types.Scene.b2xps_copy_textures
 
 
 if __name__ == "__main__":

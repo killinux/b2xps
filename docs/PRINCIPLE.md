@@ -192,7 +192,74 @@ uv = uv.reshape(-1, 2)
 
 ---
 
-## 4. 架构总结
+## 4. .mesh 与 .xps 二进制格式差异
+
+两者是同一种数据结构，差异在文件头和顶点字段：
+
+```
+.mesh 文件:                         .xps 文件:
+┌─────────────────────┐            ┌─────────────────────┐
+│  (无 header)         │            │  Header              │
+│                     │            │  ├─ magic: 323232    │
+│                     │            │  ├─ version: 2.15    │
+│                     │            │  ├─ xna_aral string  │
+│                     │            │  └─ settings[]       │
+├─────────────────────┤            ├─────────────────────┤
+│  Bones              │            │  Bones (相同)        │
+├─────────────────────┤            ├─────────────────────┤
+│  Meshes             │            │  Meshes              │
+│  └─ Vertex:         │            │  └─ Vertex:          │
+│     ├─ pos (3f)     │            │     ├─ pos (3f)      │
+│     ├─ normal (3f)  │            │     ├─ normal (3f)   │
+│     ├─ color (4B)   │            │     ├─ color (4B)    │
+│     ├─ uv (2f)      │            │     ├─ uv (2f)       │
+│     ├─ tangent (4f) │ ← 有       │     │                │ ← 无
+│     ├─ bones (4H)   │            │     ├─ bones (4H)    │
+│     └─ weights (4f) │            │     └─ weights (4f)  │
+└─────────────────────┘            └─────────────────────┘
+```
+
+| 特性 | .mesh | .xps |
+|------|-------|------|
+| Header | 无 | 有 (magic + version + settings) |
+| Tangent | 有 (4 float/顶点) | 无 (由 header version 2.15 决定) |
+| 骨骼权重 | 固定 4 个/顶点 | 固定 4 个 (version < 3 时) |
+| 文件大小 | 较大 (+16 bytes/顶点) | 较小 |
+| 兼容性 | 最广泛 | 较新工具 |
+
+Header version 的影响（通过 `bin_ops.hasTangentVersion` 判断）：
+- version 2.15 + hasHeader: `hasTangent=False`
+- 无 header (.mesh): `hasTangent=True`（默认行为）
+
+---
+
+## 5. 顶点去重
+
+### 问题
+
+Blender 的 `loop_triangles` 为每个三角形的每个角分配独立的 loop index。
+如果直接用 loop_idx 做顶点标识，共享边的相邻三角形会产生大量重复顶点。
+
+例：一个顶点被 6 个三角形共享 → 产生 6 个 XPS 顶点（实际只需 1-2 个）。
+
+### 解决方案
+
+用内容做去重 key，而非 loop_idx：
+
+```python
+key = (vertex_index,
+       round(normal_x, 5), round(normal_y, 5), round(normal_z, 5),
+       round(uv_u, 5), round(uv_v, 5))
+```
+
+同一顶点、同一法线、同一 UV 的 loop corner 共享同一个 XPS 顶点。
+只有在法线或 UV 不同时（如硬边、UV 接缝处）才拆分。
+
+效果：14 万顶点模型从 61 MB 降至 13.8 MB（接近 XNALaraMesh 的 12.4 MB）。
+
+---
+
+## 6. 插件架构
 
 ```
 Blender Model
@@ -200,6 +267,7 @@ Blender Model
     ├─ Armature ──→ 提取骨骼层级 ──→ XPS Bones
     │
     ├─ Mesh Objects ──→ 三角化 + foreach_get ──→ XPS Vertices/Faces
+    │                   + 内容去重
     │
     └─ Materials (Principled BSDF)
          │
@@ -208,5 +276,12 @@ Blender Model
          ├─ choose_render_group() 选渲染组
          └─ 坐标系转换 (Y↔Z, UV flip, winding)
                 │
-                └──→ XPS .mesh / .mesh.ascii 文件
+                ├──→ .mesh    (write_binary: 无header, 有tangent)
+                ├──→ .xps     (write_xps: 有header, 无tangent)
+                └──→ .mesh.ascii (write_ascii: 纯文本)
 ```
+
+### UI 入口
+
+1. **File → Export → XPS Model** — 标准文件浏览器，支持全部/选中导出
+2. **3D Viewport → Sidebar → B2XPS** — Panel 面板，显示选中物体列表，一键导出选中

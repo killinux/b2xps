@@ -26,15 +26,22 @@ python3 deploy_test.py
 
 ### Blender 界面
 
-**File → Export → XPS Model (.mesh/.mesh.ascii)**
+**方式一：File → Export → XPS Model (.mesh/.xps/.mesh.ascii)**
 
 导出面板选项：
 
 | 选项 | 说明 |
 |------|------|
-| Format | Binary (.mesh) 或 ASCII (.mesh.ascii) |
+| Format | Binary (.mesh) / Binary (.xps) / ASCII (.mesh.ascii) |
 | Selected Only | 只导出选中物体 |
 | Copy Textures | 复制贴图文件到导出目录 |
+
+**方式二：3D Viewport → 侧边栏 → B2XPS**
+
+1. 在视口中选中要导出的物体（Mesh + Armature）
+2. 按 `N` 打开侧边栏，切换到 **B2XPS** 标签
+3. Panel 显示选中的 Mesh 列表和 Armature
+4. 设置导出格式和路径，点击 **Export Selected**
 
 ### Python / 远程调用
 

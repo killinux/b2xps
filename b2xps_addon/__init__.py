@@ -3,7 +3,7 @@ bl_info = {
     "author": "b2xps",
     "version": (1, 0, 0),
     "blender": (4, 0, 0),
-    "location": "File > Export > XPS Model (.mesh/.mesh.ascii)",
+    "location": "File > Export > XPS Model (.mesh/.xps/.mesh.ascii)",
     "description": "Export Blender models to XPS/XNALara format with "
                    "automatic Principled BSDF material mapping",
     "category": "Import-Export",
@@ -29,10 +29,11 @@ class B2XPS_OT_export(bpy.types.Operator, ExportHelper):
     export_format: EnumProperty(
         name="Format",
         items=[
-            ('BIN', "Binary (.mesh)", "Standard binary XPS format"),
-            ('ASCII', "ASCII (.mesh.ascii)", "Text-based XPS format"),
+            ('MESH', "Binary (.mesh)", "Standard binary format, no header, with tangent"),
+            ('XPS', "Binary (.xps)", "Binary format with header, no tangent"),
+            ('ASCII', "ASCII (.mesh.ascii)", "Text-based format"),
         ],
-        default='BIN',
+        default='MESH',
     )
 
     export_selected: BoolProperty(
@@ -49,14 +50,22 @@ class B2XPS_OT_export(bpy.types.Operator, ExportHelper):
 
     def execute(self, context):
         filepath = self.filepath
+        base = filepath.rsplit(".", 1)[0]
         if self.export_format == 'ASCII':
             if not filepath.endswith(".mesh.ascii"):
-                filepath = filepath.rsplit(".", 1)[0] + ".mesh.ascii"
+                filepath = base + ".mesh.ascii"
+        elif self.export_format == 'XPS':
+            if not filepath.endswith(".xps"):
+                filepath = base + ".xps"
+        else:
+            if not filepath.endswith(".mesh"):
+                filepath = base + ".mesh"
 
         from . import exporter
         settings = {
             "export_selected": self.export_selected,
             "copy_textures": self.copy_textures,
+            "format": self.export_format,
         }
         result = exporter.export(filepath, settings)
         self.report({'INFO'},

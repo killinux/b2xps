@@ -233,9 +233,11 @@ def export(filepath, settings):
         xps_mesh = export_mesh(obj, armature, bone_name_to_idx, settings)
         xps_meshes.append(xps_mesh)
 
-    ext = os.path.splitext(filepath)[1].lower()
-    if ext == ".ascii" or filepath.endswith(".mesh.ascii"):
+    fmt = settings.get("format", "MESH")
+    if fmt == "ASCII" or filepath.endswith(".mesh.ascii"):
         writer.write_ascii(filepath, bones, xps_meshes)
+    elif fmt == "XPS" or filepath.endswith(".xps"):
+        writer.write_xps(filepath, bones, xps_meshes)
     else:
         writer.write_binary(filepath, bones, xps_meshes)
 

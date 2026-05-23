@@ -7,9 +7,27 @@ def _write_string(f, s):
     f.write(encoded)
 
 
+def _write_header(f):
+    f.write(struct.pack("<I", 323232))       # magic
+    f.write(struct.pack("<H", 2))            # version major
+    f.write(struct.pack("<H", 15))           # version minor
+    _write_string(f, "")                     # xna_aral
+    f.write(struct.pack("<I", 4))            # settings count
+    f.write(struct.pack("<IIII", 0, 0, 0, 0))
+
+
+def write_xps(filepath, bones, meshes):
+    with open(filepath, "wb") as f:
+        _write_header(f)
+        _write_model_data(f, bones, meshes, has_tangent=False)
+
+
 def write_binary(filepath, bones, meshes):
     with open(filepath, "wb") as f:
-        # .mesh format: no header, starts directly with bones
+        _write_model_data(f, bones, meshes, has_tangent=True)
+
+
+def _write_model_data(f, bones, meshes, has_tangent=True):
         f.write(struct.pack("<I", len(bones)))
         for bone in bones:
             _write_string(f, bone["name"])
@@ -35,8 +53,8 @@ def write_binary(filepath, bones, meshes):
                 f.write(struct.pack("<4B", *v["color"]))
                 for uv in v["uvs"]:
                     f.write(struct.pack("<2f", *uv))
-                # 1 tangent per vertex (not per UV layer)
-                f.write(struct.pack("<4f", 1, 0, 0, 0))
+                if has_tangent:
+                    f.write(struct.pack("<4f", 1, 0, 0, 0))
                 # fixed 4 bone weights, sorted by weight descending
                 bw = sorted(v["bone_weights"], key=lambda x: x[1], reverse=True)[:4]
                 indices = [w[0] for w in bw]

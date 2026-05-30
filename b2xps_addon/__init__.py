@@ -43,6 +43,12 @@ class B2XPS_OT_export(bpy.types.Operator, ExportHelper):
         default=False,
     )
 
+    visible_only: BoolProperty(
+        name="Visible Only",
+        description="Skip hidden objects",
+        default=True,
+    )
+
     copy_textures: BoolProperty(
         name="Copy Textures",
         description="Copy texture files to export directory",
@@ -65,6 +71,7 @@ class B2XPS_OT_export(bpy.types.Operator, ExportHelper):
         from . import exporter
         settings = {
             "export_selected": self.export_selected,
+            "visible_only": self.visible_only,
             "copy_textures": self.copy_textures,
             "format": self.export_format,
         }
@@ -78,6 +85,7 @@ class B2XPS_OT_export(bpy.types.Operator, ExportHelper):
         layout = self.layout
         layout.prop(self, "export_format")
         layout.prop(self, "export_selected")
+        layout.prop(self, "visible_only")
         layout.prop(self, "copy_textures")
 
 
@@ -116,6 +124,7 @@ class B2XPS_OT_export_selected(bpy.types.Operator):
         from . import exporter
         settings = {
             "export_selected": True,
+            "visible_only": scene.b2xps_visible_only,
             "copy_textures": scene.b2xps_copy_textures,
             "format": fmt,
         }
@@ -157,6 +166,7 @@ class B2XPS_PT_panel(bpy.types.Panel):
         layout.label(text="Settings", icon='EXPORT')
         layout.prop(scene, "b2xps_format")
         layout.prop(scene, "b2xps_export_path")
+        layout.prop(scene, "b2xps_visible_only")
         layout.prop(scene, "b2xps_copy_textures")
 
         # Export button
@@ -198,6 +208,11 @@ def register():
         default="//export/model",
         subtype='FILE_PATH',
     )
+    bpy.types.Scene.b2xps_visible_only = BoolProperty(
+        name="Visible Only",
+        description="Skip hidden objects",
+        default=True,
+    )
     bpy.types.Scene.b2xps_copy_textures = BoolProperty(
         name="Copy Textures",
         description="Copy texture files to export directory",
@@ -211,6 +226,7 @@ def unregister():
         bpy.utils.unregister_class(cls)
     del bpy.types.Scene.b2xps_format
     del bpy.types.Scene.b2xps_export_path
+    del bpy.types.Scene.b2xps_visible_only
     del bpy.types.Scene.b2xps_copy_textures
 
 

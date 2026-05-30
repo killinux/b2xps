@@ -289,9 +289,13 @@ def export(filepath, settings):
     else:
         objects = list(bpy.context.scene.objects)
 
+    visible_only = settings.get("visible_only", True)
+
     armature = None
     mesh_objects = []
     for obj in objects:
+        if visible_only and obj.hide_get():
+            continue
         if obj.type == "ARMATURE":
             armature = obj
         elif obj.type == "MESH" and obj.data.vertices and not _is_rig_shape(obj):
